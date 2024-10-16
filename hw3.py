@@ -73,7 +73,7 @@ plt.plot(z,yplot[:,3])
 plt.plot(z,yplot[:,4])
 plt.xlabel('depth below surface (m)')
 plt.ylabel('ice velocity (m/yr)')
-plt.legend(['data',('rmse=',rms[0]),('rmse=',rms[1]),('rmse=',rms[2]),('rmse=',rms[3]),('rmse=',rms[4])])
+plt.legend(['data',('rmse=', rms[0]),('rmse=',rms[1]),('rmse=',rms[2]),('rmse=',rms[3]),('rmse=',rms[4])])
 
 import random
 
@@ -221,11 +221,11 @@ print('3. Plot the distribution of RMSE values for each degree polynomial.')
 plt.figure(figsize=(6,7))
 plt.subplot(5,1,1)
 plt.hist(rmse_90[0,:])
-plt.xlim([0, 9])
+plt.xlim([0, 10])
 plt.title('rmse for degree 0')
 plt.subplot(5,1,2)
 plt.hist(rmse_90[1,:])
-plt.xlim([0, 9])
+plt.xlim([0, 10])
 plt.title('rmse for degree 1')
 plt.subplot(5,1,3)
 plt.hist(rmse_90[2,:])
@@ -233,11 +233,11 @@ plt.xlim([0, 9])
 plt.title('rmse for degree 2')
 plt.subplot(5,1,4)
 plt.hist(rmse_90[3,:])
-plt.xlim([0, 9])
+plt.xlim([0, 10])
 plt.title('rmse for degree 3')
 plt.subplot(5,1,5)
 plt.hist(rmse_90[4,:])
-plt.xlim([0, 9])
+plt.xlim([0, 10])
 plt.title('rmse for degree 4')
 plt.tight_layout()
 plt.show()
@@ -364,7 +364,7 @@ for i in range(1000):
 mean_rmse=np.zeros(len(windowoptions))
 #getting mean rmse for each window size
 for i in range(len(windowoptions)):
-  mean_rmse[i] = np.mean(rmse_weighted[i,:])
+  mean_rmse[i] = np.nanmean(rmse_weighted[i,:])
 
 #plotting mean window size
 print('6. Find the optimum window size for the weighted moving window average model.')
@@ -383,8 +383,8 @@ g = 9.81       # Gravity (m/s^2)
 theta = 10     # Angle (degrees)
 
 # Parameter ranges
-A_ice = np.linspace(0, 1e-6, 1000)  # A_grad range
-n_ice = np.linspace(0, 4, 1000)      # n_grad range
+A_ice = np.linspace(1e-18, 1e-17, 1000)  # A_grad range
+n_ice = np.linspace(2, 4, 1000)      # n_grad range
 
 # Initialize RMSE array
 rmse_ice = np.zeros((len(A_ice), len(n_ice)))
@@ -410,38 +410,51 @@ print(f'Minimum RMSE: {minimum_rmse:.6f}')
 print('8. Plot the root mean square (RMS) error (mean over all depths) as a function of A and n.')
 plt.figure(1)
 plt.clf()
-plt.imshow(rmse_ice,extent=[min(A_ice), max(A_ice), min(n_ice), max(n_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=20)
-plt.xlabel('A')
-plt.ylabel('n')
+plt.imshow(rmse_ice,extent=[2.5, 3.5, min(A_ice), max(A_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=10)
+plt.xlabel('n')
+plt.ylabel('A')
 plt.colorbar(label='RMSE')
 plt.title('RMSE values for linear model')
+plt.scatter(best_n,best_A,25,'red',label='bruteforce')
+plt.show()
+
+A_ice = np.linspace(1e-18, 1e-17, 1000)
+rmseee_ice=np.zeros(len(A_ice))
+for i in range(len(A_ice)):
+      umodel = uxsurf - (A_ice[i] * (rho * g * np.sin(np.radians(theta)))**3) * z**(3 + 1)
+      rmseee_ice[i] = np.sqrt(np.mean((umodel - v)**2))  # Calculate RMS
+
+
+plt.plot(A_ice,rmseee_ice)
+plt.ylabel('rmse')
+plt.xlabel('A')
 
 # lets do gradient descent
 from scipy.optimize import minimize
 
-# Initialize a global list to store RMSE values
+# Initialize a list to store RMSE values
 rmse_history = []
 
 def RMSEval(params):
-    A_grad, n_grad = params  # Extract parameters A_grad and n_grad
+    const = params  # A*rho*g*sin(theta)^n
     # Compute the modeled velocity (u_model) based on the current A_grad and n_grad
-    umodel = uxsurf - (A_grad * (rho * g * np.sin(np.radians(theta)))**n_grad) * z**(n_grad + 1)
+    umodel = uxsurf - const * z**(3 + 1)
     # Calculate RMSE between the modeled velocity and the observed velocity (v)
     rmse = np.sqrt(np.mean((umodel - v)**2))
     rmse_history.append(rmse)
     return rmse
 
-# Perform optimization using scipy.optimize.minimize
-initial_guess = [1e-4, 2]  # Starting guess for A_grad and n_grad
-bounds = [(0, 1e-3), (0, 4)]
-result = minimize(RMSEval, initial_guess, bounds = bounds)
+# Perform optimization
+initial_guess = [2e-8]  # Starting guess for A_grad and n_grad
+result = minimize(RMSEval, initial_guess)
 
 # Extract the best-fit parameters from the optimization result
 pbest = result.x
-n_best = pbest[1]
-A_best = pbest[0]
+best_const = pbest[0]
+divider = (rho*g*np.sin(np.radians(theta)))**3
+A_best = best_const/divider
 print('9. Find the optimum values of A and n using the gradient search method with MATLAB’s fminsearch function.')
-print(f'Best parameters: A_grad = {pbest[0]:.6e}, n_grad = {pbest[1]:.6f}')
+print(f'Best parameters: A_grad = {A_best:.6e}')
 
 #including relative density histo function
 def rdh(data,bins):
@@ -458,10 +471,24 @@ def rdh(data,bins):
     plt.bar(xbins[:-1] + dx / 2, rdh, width=dx, edgecolor='black')
     return rdh
 
+def relative_density_histogram(data, bins=30):
+    """
+    LMS 9/3/24
+    relative density histogram function
+    inputs: data = 1-D dataset array
+    outputs: rdh = plot of relative density histogram
+    """
+    plt.figure(2)
+    nc, xbins = np.histogram(data, bins=bins)
+    dx = xbins[1] - xbins[0]  # bin width
+    rdh = nc / (sum(nc) * dx)  # relative density histogram
+    plt.bar(xbins[:-1] + dx / 2, rdh, width=dx, edgecolor='black')
+    return rdh
+
 # Define the RMSE evaluation function for optimization
 def RMSEval(params, z, v, uxsurf, rho, g, theta):
-    A_grad = params  # extract the parameters A_grad and n_grad
-    umodel = uxsurf - (A_grad * (rho * g * np.sin(np.radians(theta)))**n_best) * z**(n_best + 1)
+    const = params
+    umodel = uxsurf - const* z**(3 + 1)
     rmse = np.sqrt(np.mean((umodel - v) ** 2))  # calculate RMSE
     return rmse
 
@@ -484,19 +511,19 @@ def perform_optimization(data, percenttrain=0.9, num_iterations=1000):
         theta = 10
 
         # Starting guess for A_grad
-        initial_guess = [1e-4]
-
-        # Set bounds to ensure parameters are positive
-        bounds = [(0,1e-3)]
+        initial_guess = [2e-8]
 
         # Perform optimization
-        result = minimize(RMSEval, initial_guess, args=(z_train, v_train, uxsurf, rho, g, theta),
-                          bounds=bounds)
+        result = minimize(RMSEval, initial_guess, args=(z_train, v_train, uxsurf, rho, g, theta))
 
         # Extract the best-fit parameters
-        Abest = result.x
+        best_const = result.x[0]
+        divider = (rho * g * np.sin(np.radians(theta))) ** 3
+        A_bbest = best_const / divider
+
+        # Store the final RMSE for this iteration
         rmse_results.append(result.fun)  # Store the final RMSE for this iteration
-        A_val.append(Abest[0])
+        A_val.append(A_bbest)
     return rmse_results, A_val
 
 
@@ -505,16 +532,20 @@ rmse_results = perform_optimization(D, percenttrain=0.9, num_iterations=1000)[0]
 A_val = perform_optimization(D, percenttrain=0.9, num_iterations=1000)[1]
 
 print('10.Randomly sample 90% of the dataset and find the optimum value of A using the gradient search method, and repeat 1000 times. Plot the distribution of A and the RMS error (over all depths) in the model using a relative density histogram.')
-# Plot the RMSE results
 
-rdh(rmse_results, bins=20)
+rmseplot = np.zeros(len(A_val))
+for i in range(len(A_val)):
+   umodel = uxsurf - (A_val[i] * (rho * g * np.sin(np.radians(theta)))**3) * z**(3 + 1)
+   rmseplot[i] = np.sqrt(np.mean((umodel - v)**2))
+
+rdh(rmseplot, bins=30)
 plt.title('relative density histogram of RMSE Results')
 plt.xlabel('RMSE')
 plt.ylabel('relative density')
 plt.show()
 
 
-rdh(A_val, bins=20)
+rdh(A_val, bins=30)
 plt.title('relative density histogram of A Results')
 plt.xlabel('A')
 plt.ylabel('relative density')
@@ -523,21 +554,17 @@ plt.show()
 mean_A = np.mean(A_val)
 std_A = np.std(A_val)
 
-print('11. Plot the mean optimum values of A and its standard deviation with vertical errorbars on your figure from #7.')
-# now plot as heatmap
 plt.figure(1)
 plt.clf()
-plt.imshow(rmse_ice,extent=[0.25e-6, 0.3e-6, min(n_ice), max(n_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=20)
-plt.xlabel('A')
-plt.ylabel('n')
+plt.imshow(rmse_ice,extent=[2.5, 3.5, 4e-18, max(A_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=10)
+plt.xlabel('n')
+plt.ylabel('A')
 plt.colorbar(label='RMSE')
 plt.title('RMSE values for linear model')
-# Overlay the mean A with error bars
-plt.errorbar(mean_A, n_best, xerr=std_A, fmt='o', color='red', label='Mean A with Std Dev', markersize=5)  # Note the xerr for A
-
-plt.title('Heatmap of RMSE with Mean A and Std Dev')
-plt.xlabel('A')
-plt.ylabel('n')
+plt.scatter(best_n,best_A,25,'red',label='bruteforce')
+plt.errorbar(3, mean_A, yerr=std_A, fmt='o', color='red', label='Mean A with Std Dev', markersize=2)  # Note the xerr for A
+plt.xlabel('n')
+plt.ylabel('A')
 plt.legend()
 plt.show()
 
