@@ -393,7 +393,7 @@ rmse_ice = np.zeros((len(A_ice), len(n_ice)))
 for i in range(len(A_ice)):
     for j in range(len(n_ice)):
         umodel = uxsurf - (A_ice[i] * (rho * g * np.sin(np.radians(theta)))**n_ice[j]) * z**(n_ice[j] + 1)
-        rmse_ice[i, j] = np.sqrt(np.mean((umodel - v)**2))  # Calculate RMSE
+        rmse_ice[i,j] = np.sqrt(np.mean((umodel - v)**2))  # Calculate RMSE
 
 # Find the indices of the minimum RMSE
 minrmse = np.unravel_index(np.argmin(rmse_ice), rmse_ice.shape)
@@ -410,7 +410,7 @@ print(f'Minimum RMSE: {minimum_rmse:.6f}')
 print('8. Plot the root mean square (RMS) error (mean over all depths) as a function of A and n.')
 plt.figure(1)
 plt.clf()
-plt.imshow(rmse_ice,extent=[2.5, 3.5, min(A_ice), max(A_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=10)
+plt.imshow(rmse_ice,extent=[min(n_ice), max(n_ice),min(A_ice),max(A_ice)], aspect='auto',origin='lower',cmap='viridis',vmin=0, vmax=10)
 plt.xlabel('n')
 plt.ylabel('A')
 plt.colorbar(label='RMSE')
@@ -531,12 +531,13 @@ def perform_optimization(data, percenttrain=0.9, num_iterations=1000):
 rmse_results = perform_optimization(D, percenttrain=0.9, num_iterations=1000)[0]
 A_val = perform_optimization(D, percenttrain=0.9, num_iterations=1000)[1]
 
-print('10.Randomly sample 90% of the dataset and find the optimum value of A using the gradient search method, and repeat 1000 times. Plot the distribution of A and the RMS error (over all depths) in the model using a relative density histogram.')
-
 rmseplot = np.zeros(len(A_val))
+#find rmse using test data
 for i in range(len(A_val)):
-   umodel = uxsurf - (A_val[i] * (rho * g * np.sin(np.radians(theta)))**3) * z**(3 + 1)
-   rmseplot[i] = np.sqrt(np.mean((umodel - v)**2))
+   umodel = uxsurf - (A_val[i] * (rho * g * np.sin(np.radians(theta)))**3) * ztest[:,i]**(3 + 1)
+   rmseplot[i] = np.sqrt(np.mean((umodel - vtest[:,i])**2))
+
+print('10.Randomly sample 90% of the dataset and find the optimum value of A using the gradient search method, and repeat 1000 times. Plot the distribution of A and the RMS error (over all depths) in the model using a relative density histogram.')
 
 rdh(rmseplot, bins=30)
 plt.title('relative density histogram of RMSE Results')
